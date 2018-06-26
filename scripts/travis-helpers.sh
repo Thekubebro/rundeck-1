@@ -24,8 +24,12 @@ export RUNDECK_BUILD_NUMBER="${RUNDECK_BUILD_NUMBER:-TRAVIS_BUILD_NUMBER}"
 export RUNDECK_COMMIT="${RUNDECK_COMMIT:-TRAVIS_COMMIT}"
 export RUNDECK_BRANCH="${RUNDECK_BRANCH:-TRAVIS_BRANCH}"
 
-S3_BUILD_ARTIFACT_PATH="s3://rundeck-travis-artifacts/oss/${TRAVIS_BRANCH}/travis-builds/${RUNDECK_BUILD_NUMBER}/artifacts"
-S3_COMMIT_ARTIFACT_PATH="s3://rundeck-travis-artifacts/oss/${TRAVIS_BRANCH}/commits/${RUNDECK_COMMIT}/artifacts"
+
+S3_ARTIFACT_BASE="s3://rundeck-travis-artifacts/oss/rundeck"
+
+S3_BUILD_ARTIFACT_PATH="${S3_ARTIFACT_BASE}/brach/${TRAVIS_BRANCH}/build/${RUNDECK_BUILD_NUMBER}/artifacts"
+S3_COMMIT_ARTIFACT_PATH="${S3_ARTIFACT_BASE}/branch/${TRAVIS_BRANCH}/commit/${RUNDECK_COMMIT}/artifacts"
+S3_TAG_ARTIFACT_PATH="${S3_ARTIFACT_BASE}/tag/${TRAVIS_TAG}"
 
 S3_CI_RESOURCES="s3://rundeck-ci/shared/resources"
 
