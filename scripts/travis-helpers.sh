@@ -4,6 +4,7 @@
 # Exported variables
 # ==================
 # RUNDECK_BUILD_NUMBER = build number from TRAVIS_BUILD_NUMBER
+# RUNDECK_TAG = Git tag used for this build and extracted from TRAVIS_TAG
 # RUNDECK_RELEASE_TAG = (SNAPSHOT|GA|other) extracted from TRAVIS_TAG
 # RUNDECK_RELEASE_VERSION = version number extracted from TRAVIS_TAG
 # RUNDECK_PREV_RELEASE_VERSION = same as above extracted from second oldest tag in git history
@@ -18,20 +19,29 @@ set -e
 source scripts/helpers.sh
 
 ## Overrides: Should be commented out in master
-# RUNDECK_BUILD_NUMBER = "3347"
+# RUNDECK_BUILD_NUMBER="3347"
+# RUNDECK_TAG="v3.0.0-alpha4"
 
 export RUNDECK_BUILD_NUMBER="${RUNDECK_BUILD_NUMBER:-TRAVIS_BUILD_NUMBER}"
 export RUNDECK_COMMIT="${RUNDECK_COMMIT:-TRAVIS_COMMIT}"
 export RUNDECK_BRANCH="${RUNDECK_BRANCH:-TRAVIS_BRANCH}"
+export RUNDECK_TAG="${RUNDECK_TAG:-TRAVIS_TAG}"
 
+# Location of CI resources such as private keys
+S3_CI_RESOURCES="s3://rundeck-ci/shared/resources"
 
 S3_ARTIFACT_BASE="s3://rundeck-travis-artifacts/oss/rundeck"
 
 S3_BUILD_ARTIFACT_PATH="${S3_ARTIFACT_BASE}/brach/${TRAVIS_BRANCH}/build/${RUNDECK_BUILD_NUMBER}/artifacts"
 S3_COMMIT_ARTIFACT_PATH="${S3_ARTIFACT_BASE}/branch/${TRAVIS_BRANCH}/commit/${RUNDECK_COMMIT}/artifacts"
-S3_TAG_ARTIFACT_PATH="${S3_ARTIFACT_BASE}/tag/${TRAVIS_TAG}"
+S3_TAG_ARTIFACT_PATH="${S3_ARTIFACT_BASE}/tag/${TRAVIS_TAG}/artifacts"
 
-S3_CI_RESOURCES="s3://rundeck-ci/shared/resources"
+# Store artifacts in a predictable location in the case of version tags.
+# This will allow us to locate them across repos without passing information explicitly.
+S3_ARTIFACT_PATH="${S3_BUILD_ARTIFACT_PATH}"
+if [[ "${RUNDECK_TAG}" =~ ^v ]] ; then
+    S3_ARTIFACT_PATH="${S3_TAG_ARTIFACT_PATH}"
+else
 
 mkdir -p artifacts/packaging
 
@@ -44,7 +54,7 @@ export_tag_info() {
         TAG_PARTS=( $TAG_PARTS )
     fi
 
-    PREV_TAG_PARTS=( $(tag_parts `git describe --abbrev=0 --tags $(git describe --abbrev=0)^ `) )
+    local PREV_TAG_PARTS=( $(tag_parts `git describe --abbrev=0 --tags $(git describe --abbrev=0)^ `) )
 
     export RUNDECK_RELEASE_VERSION="${TAG_PARTS[0]}"
     export RUNDECK_RELEASE_TAG="${TAG_PARTS[1]:-SNAPSHOT}"
@@ -65,27 +75,28 @@ export_repo_info() {
 
 # Wraps bash command in code folding and timing "stamps"
 script_block() {
-    NAME="${1}"
+    local NAME="${1}"; shift;
+    local COMMAND="${@}"
 
-    # Remove block name from arg array
-    shift
+    # Return from 
+    local ret
 
     travis_fold start "${NAME}"
         travis_time_start
-            eval "${@}"
+            eval "${COMMAND}"
             ret=$?
-            echo "Command [${@}] returned ${ret}"
+            echo "Command [${COMMAND}] returned ${ret}"
         travis_time_finish
     travis_fold end "${NAME}"
-    return $RET
+    return $ret
 }
 
 sync_from_s3() {
-    aws s3 sync --delete "${S3_BUILD_ARTIFACT_PATH}" artifacts
+    aws s3 sync --delete "${S3_ARTIFACT_PATH}" artifacts
 }
 
 sync_to_s3() {
-    aws s3 sync --delete ./artifacts "$S3_BUILD_ARTIFACT_PATH"
+    aws s3 sync --delete ./artifacts "${S3_ARTIFACT_PATH}"
 }
 
 sync_commit_from_s3() {
@@ -93,7 +104,7 @@ sync_commit_from_s3() {
 }
 
 sync_commit_to_s3() {
-    aws s3 sync --delete ./artifacts "$S3_COMMIT_ARTIFACT_PATH"
+    aws s3 sync --delete ./artifacts "${S3_COMMIT_ARTIFACT_PATH}"
 }
 
 extract_artifacts() {
